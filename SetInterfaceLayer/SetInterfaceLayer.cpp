@@ -5,7 +5,9 @@
 #include <vector>
 
 struct Table
-{
+{//-2147483648 is used to represent NULL
+        //Later could replace this integer value with a bitwise operation, just because it would look a lot better
+        //Need to identify what the bit/byte representation of this number is
     std::vector<std::vector<int>> columns;
 };
 
@@ -13,6 +15,20 @@ struct SelectList
 {
     int table;
     int column;
+};
+
+struct SelectList2
+{
+    int column;
+    int staticValue;
+};
+
+struct ConditionList
+{
+    //int table;    //Currently only utilized within 'Select(..)' where there is only one Table
+    int column;
+    //int condition;    //For now everything is '=='
+    int staticValue;
 };
 
 struct JoinList
@@ -25,7 +41,11 @@ void Print(std::vector<int> column)
 {
     for (int i = 0; i < column.size(); i++)
     {
-        std::cout << column.at(i) << std::endl;
+        int value = column.at(i);
+        if (value != -2147483648)
+            std::cout << value << std::endl;
+        else
+            std::cout << "NULL" << std::endl;
     }
 }
 
@@ -40,12 +60,63 @@ void Print(Table table)
             for (int j = 0; j < columnCount; j++)
             {
                 int value = table.columns.at(j).at(i);
-                std::cout << value << "\t";
+                if (value != -2147483648)
+                    std::cout << value << "\t";
+                else
+                    std::cout << "NULL" << "\t";
             }
             std::cout << std::endl;
         }
 
     }
+}
+
+//1 Table in 1 Table out
+//Can be used to reorder or omit columns
+//Can utilize a static value condition
+//Condition limited to 1 entry for now
+    //In the future when there are multiple conditions, instead of checking all of the conditions for each row one at a time:
+                                                    //  check 1 condition at a time and maintain a subset of indexes that either passed or failed the condition
+                                                    //  each subsequent condition check would be against that subset of indexes continuing the pattern
+                                                    //  can start to optimize my code in a 'Set' fashion
+Table Select(Table tableA, std::vector<SelectList2> selectColumn, std::vector<ConditionList> condition)
+{
+    Table newTable;//select.size() determines the number of columns in the new table
+    newTable.columns.resize(selectColumn.size());
+
+    //Both tables have columns (Because of the below size check against column[0])
+    if (tableA.columns.size() > 0)
+    {
+        //In the future there will be a different way to manage the record counts in a table
+        int tableARowCount = tableA.columns.at(0).size();
+        for (int ARow = 0; ARow < tableARowCount; ARow++)
+        {                                                       //Hardcoded condition at 0 index
+            std::vector<int>& tableAConditionColumn = tableA.columns.at(condition.at(0).column);
+            int tableAConditionValue = tableAConditionColumn.at(ARow);
+            int staticValue = condition.at(0).staticValue;
+
+            if (tableAConditionValue == staticValue)
+            {
+                for (int selectID = 0; selectID < selectColumn.size(); selectID++)
+                {
+                    int value;
+                    int columnID = selectColumn.at(selectID).column;
+                    if (columnID > -1)
+                    {
+                        int rowID = ARow;
+                        value = tableA.columns.at(columnID).at(rowID);
+                    }
+                    else
+                    {
+                        value = selectColumn.at(selectID).staticValue;
+                    }
+                    newTable.columns.at(selectID).push_back(value);
+                }
+            }
+        }
+    }
+
+    return newTable;
 }
 
 //Join limited to 1 entry for now
@@ -85,7 +156,6 @@ Table InnerJoin(Table tableA, Table tableB, std::vector<SelectList> select, std:
                         }
                     }
                 }
-
             }
         }
     }
@@ -95,15 +165,16 @@ Table InnerJoin(Table tableA, Table tableB, std::vector<SelectList> select, std:
 
 int main()
 {
-    std::vector<int> tableAcolumnA({ 1,2 });
-    std::vector<int> tableAcolumnB({ 3,4 });
+    std::vector<int> tableAcolumnA({ 1,2,3,4 });
+    std::vector<int> tableAcolumnB({ 3,4,11,12 });
     Table tableA({ { tableAcolumnA ,tableAcolumnB } });
 
-    std::vector<int> tableBcolumnA({ 2,1 });
-    std::vector<int> tableBcolumnB({ 5,6 });
+    std::vector<int> tableBcolumnA({ 2,1,1,4 });
+    std::vector<int> tableBcolumnB({ 5,6,21,22 });
     Table tableB({ { tableBcolumnA ,tableBcolumnB } });
 
     Table tableC = InnerJoin(tableA, tableB, { {0,0},{0,1},{1,1} }, { {0,0} });
+    Table tableD = Select(tableC, { {0,0},{2,0},{-1,9},{1,0},{-1,7} }, { {1,3} });
 
     std::cout << "TableA:" << std::endl;
     Print(tableA);
@@ -111,6 +182,8 @@ int main()
     Print(tableB);
     std::cout << std::endl << "TableC:" << std::endl;
     Print(tableC);
+    std::cout << std::endl << "TableD:" << std::endl;
+    Print(tableD);
     std::cout << std::endl;
 
     std::cin.get();
